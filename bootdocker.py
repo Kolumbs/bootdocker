@@ -164,13 +164,19 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         logging.info('Data sent: ' + str(self.payload))
         self.payload = self.payload.decode()
         logging.info('Data decoded: ' + self.payload)
-        logging.info('full_name test: ' + str('full_name' in self.payload))
         url = 'git_url'
+        logging.info('git_url test: ' + str(url in self.payload))
         if url in self.payload:
             a = self.payload.find(url)
+            a -= 1
             url = self.payload[a:]
-            a = url.find(':')
+            a = url.find(',')
             url = url[:a]
+            logging.info('Url stage 1: ' + url)
+            a = url.find(':')
+            url = url[a+1:]
+            logging.info('Url stage 2: ' + url)
+            url = url.strip('"') + '#main'
             logging.info('Docker lanched with: ' + url)
             Docker(repo,tag,url).start()
             logging.info('Docker ends')
