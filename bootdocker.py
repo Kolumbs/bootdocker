@@ -38,7 +38,7 @@ class Docker():
     Starts docker and returns STARTED, if docker fails at any time issues FAILED
     >>> url = 'git@github.com:Kolumbs/bootdocker.git#main:test'
     >>> Docker('bot','demo',url).start()
-    STARTED
+    <STARTED>
     '''
 
 
@@ -86,16 +86,25 @@ class Docker():
             self.run('docker container wait %s' % con,log=False)
 
     def start(self):
+        print('STARTED')
         cmd = 'docker build --tag %s:%s %s' % (self.repo,self.tag,self.url)
         self.run(cmd)
+        print('BUILT')
         self.cons('stop')
         self.run('docker container prune -f')
         proc = self.run('docker run %s:%s' % (self.repo,self.tag),blocking=False)
-        print('STARTED')
+        print('STARTED RUN')
         while proc.returncode == None:
+            time.sleep(2)
             proc.poll()
+            if not proc.returncode == None or not proc.returncode == 0:
+                print('Program ends with error code: ' + str(proc.returncode))
+                for line in proc.stderr.readlines():
+                    print(line.decode())
+            else:
+                print('Program has finished succesfully with code: ' + str(proc.returncode))
             time.sleep(20)
-        print('FAIL')
+        print('END')
 
     def writer(self,sec='No'):
         '''Opens a file-like object and rewrites from bottom to top all content
