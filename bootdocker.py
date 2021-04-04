@@ -158,7 +158,6 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
 
     def git(self):
         logging.info('Read json from git webhook')
-        self._testdata()
         logging.info('Http request: ' + str(self.data))
         logging.info('Http headers: ' + str(self.httphead.keys()))
         logging.info('Http values: ' + str(self.httphead.values()))
@@ -166,22 +165,29 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         self.payload = self.payload.decode()
         logging.info('Data decoded: ' + self.payload)
         logging.info('full_name test: ' + str('full_name' in self.payload))
-        if 'full_name' in self.payload:
-            logging.info('true')
-        Docker(self.repo,self.tag,self.url).start()
-        logging.info('Docker lanched')
+        url = 'git_url'
+        if url in self.payload:
+            a = self.payload.find(url)
+            url = self.payload[a:len(url)]
+            tag = requests[1]
+            logging.info('Docker lanched')
+            Docker('bots',tag,url).start()
+            logging.info('Docker ends')
 
     def post(self):
         try:
             self.httphead = http.client.parse_headers(self.rfile)
             c = int(self.httphead.get('Content-Length'))
             self.payload = self.rfile.read(c)
-            if self.data[1] == '/git-bot': 
+            self._testdata()
+            request = self.data[1]
+            request = request.split(':')
+            logging.info('Request: ' + str(request))
+            if request[0] == '/git-bot': 
                 self.send_response(msg='Git handler posted\n')
                 self.git()
             else:
                 self.send_response()
-            logging.info('Sent everything')
 
         except Exception as err:
             logging.info('error needs traceback implementation')
@@ -216,7 +222,7 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
                 break
 
     def _testdata(self):
-         logging.info('-'*40 + '\n' + 'Log full received message:\n')
+         logging.info('-'*40 + '\n' + 'Log full received message:')
          logging.info('Http request: ' + str(self.data))
          logging.info('Http headers: ' + str(self.httphead.keys()))
          logging.info('Http values: ' + str(self.httphead.values()))

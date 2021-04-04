@@ -1,0 +1,10 @@
+[Unit]
+Description=Update and admin of bootdocker
+After=network.target auditd.service sshd.service
+
+[Service]
+ExecStart=/usr/bin/python3 /home/juris/bootdocker/bootdocker.py --port 33004
+
+[Install]
+WantedBy=multi-user.target
+Alias=bootdocker.service
