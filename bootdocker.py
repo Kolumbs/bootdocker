@@ -227,6 +227,9 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
 
     def get(self):
         data = self.rfile.readline()
+        logging.info(self.data)
+        self.httphead = http.client.parse_headers(self.rfile)
+        logging.info(self.httphead)
         while data:
             logging.info(data)
             msg = data
