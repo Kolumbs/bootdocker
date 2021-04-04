@@ -168,8 +168,10 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         url = 'git_url'
         if url in self.payload:
             a = self.payload.find(url)
-            url = self.payload[a:a+len(url)]
-            logging.info('Docker lanched')
+            url = self.payload[a:]
+            a = url.find(':')
+            url = url[:a]
+            logging.info('Docker lanched with: ' + url)
             Docker(repo,tag,url).start()
             logging.info('Docker ends')
 
