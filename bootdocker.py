@@ -184,7 +184,7 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
             logging.info('Request: ' + str(request))
             if request[0] == '/git-bot': 
                 self.send_response(msg='Git handler posted\n')
-                self.git('bots',requests[1])
+                self.git('bots',request[1])
             else:
                 self.send_response()
 
