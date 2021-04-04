@@ -156,7 +156,7 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
                     logging.info('Receiving from ssh service:\n ' + str(data))
                     self.request.sendall(data)
 
-    def git(self):
+    def git(self,repo,tag):
         logging.info('Read json from git webhook')
         logging.info('Http request: ' + str(self.data))
         logging.info('Http headers: ' + str(self.httphead.keys()))
@@ -169,9 +169,8 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         if url in self.payload:
             a = self.payload.find(url)
             url = self.payload[a:len(url)]
-            tag = requests[1]
             logging.info('Docker lanched')
-            Docker('bots',tag,url).start()
+            Docker(repo,tag,url).start()
             logging.info('Docker ends')
 
     def post(self):
@@ -185,7 +184,7 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
             logging.info('Request: ' + str(request))
             if request[0] == '/git-bot': 
                 self.send_response(msg='Git handler posted\n')
-                self.git()
+                self.git('bots',requests[1])
             else:
                 self.send_response()
 
