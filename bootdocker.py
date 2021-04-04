@@ -113,22 +113,21 @@ class Docker():
             time.sleep(sec)
 
 
-class DockerServer(socketserver.StreamRequestHandler):
-    
-    
+class DockerServer(socketserver.StreamRequestHandler,Docker):
+
+
     def handle(self):
         logging.info('Client connected: ' + str(self.client_address))
         self.data = self.rfile.readline().decode()
         self.data = self.data.strip('\r\n')
+        self.data = self.data.split(' ')
         if self.data:
             logging.info('Client sending: ' + str(self.data))
             self.dispatcher()
         logging.info('Client disconnected: ' + str(self.client_address))
 
     def dispatcher(self):
-        data = self.data.split(' ')
-        logging.info(data)
-        services = {'SSH': data[0], 'POST': data[0], 'GET': data[0]}
+        services = {'SSH': self.data[0], 'POST': self.data[0], 'GET': self.data[0]}
         s = [key for key in services if key == services[key]]
         logging.info('Services found: ' + str(s))
         if s:
@@ -157,29 +156,52 @@ class DockerServer(socketserver.StreamRequestHandler):
                     logging.info('Receiving from ssh service:\n ' + str(data))
                     self.request.sendall(data)
 
-    def parse_http(self):
-        self.httphead = http.client.parse_headers(self.rfile)
-        logging.info(self.httphead.keys())
-        logging.info(self.httphead.values())
-            
+    def git(self):
+        logging.info('Read json from git webhook')
+        self._testdata()
+        logging.info('Http request: ' + str(self.data))
+        logging.info('Http headers: ' + str(self.httphead.keys()))
+        logging.info('Http values: ' + str(self.httphead.values()))
+        logging.info('Data sent: ' + str(self.payload))
+        self.payload = self.payload.decode()
+        logging.info('Data decoded: ' + self.payload)
+        logging.info('full_name test: ' + str('full_name' in self.payload))
+        if 'full_name' in self.payload:
+            logging.info('true')
+        Docker(self.repo,self.tag,self.url).start()
+        logging.info('Docker lanched')
+
     def post(self):
         try:
-            self.parse_http()
+            self.httphead = http.client.parse_headers(self.rfile)
             c = int(self.httphead.get('Content-Length'))
             self.payload = self.rfile.read(c)
-            sendback = b'HTTP/1.1 200 OK\r\n'
-            sendback += 'Content-Type: text/html\r\n'.encode()
-            sendback += b'\r\n'
-            sendback += ('<html><body><pre>%s</pre></html>\r\n').encode()
-            self.request.send(sendback)
+            if self.data[1] == '/git-bot': 
+                self.send_response(msg='Git handler posted\n')
+                self.git()
+            else:
+                self.send_response()
             logging.info('Sent everything')
-            bootdocker.start()
-            logging.info('Docker lanched')
+
         except Exception as err:
             logging.info('error needs traceback implementation')
             logging.info(error_trace(Exception,err))
             logging.info('traceback implemented')
             raise
+
+    def send_response(self,status='200 OK',msg=False):
+        if not msg:
+            msg = '<html><body><pre>This is an autobot API service</pre></html>\r\n'
+        l = len(msg)
+        msg = msg.encode()
+        sendback = ('HTTP/1.1 %s\r\n' % status).encode()
+        sendback += 'Content-Type: text/html\r\n'.encode()
+        sendback += ('Content-Length: %s\r\n' % l).encode()
+        sendback += b'\r\n'
+        sendback += msg 
+        self.request.sendall(sendback)
+        logging.info(sendback)
+
 
     def get(self):
         data = self.rfile.readline()
@@ -190,21 +212,22 @@ class DockerServer(socketserver.StreamRequestHandler):
             msg += data
             if data == b'\r\n':
                 logging.info('Sending back:')
-                sendback = b'HTTP/1.1 200 OK\r\n'
-                sendback += 'Content-Type: text/html\r\n'.encode()
-                sendback += b'\r\n'
-                sendback += ('<html><body><pre>%s</pre></html>\r\n' % msg).encode()
-                self.request.sendall(sendback)
-                logging.info(sendback)
+                self.send_response()
                 break
 
+    def _testdata(self):
+         logging.info('-'*40 + '\n' + 'Log full received message:\n')
+         logging.info('Http request: ' + str(self.data))
+         logging.info('Http headers: ' + str(self.httphead.keys()))
+         logging.info('Http values: ' + str(self.httphead.values()))
+         logging.info('Data sent: ' + str(self.payload))
 
 class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
     pass
 
 
 if __name__ == '__main__':
-    print('Loading system . . .')
+    print('Loading system ...')
     import argparse
 
     #Arguments for the software
