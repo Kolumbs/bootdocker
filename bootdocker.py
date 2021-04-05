@@ -153,7 +153,6 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         self.payload = self.payload.decode()
         self.msg += '\n    Data(decoded): ' + self.payload
         url = 'git_url'
-        self.msg += logging.info('\n    Status of git_url in data: ' + str(url in self.payload))
         if url in self.payload:
             a = self.payload.find(url)
             a -= 1
