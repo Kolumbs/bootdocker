@@ -230,6 +230,16 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         logging.info(self.data)
         self.httphead = http.client.parse_headers(self.rfile)
         logging.info(self.httphead)
+        if self.data[1] == '/logs':
+            logs = []
+            a = str(handler.rotation_filename).find('RotatingFile')
+            path = str(handler.rotation_filename)[a:]
+            path = path.split(' ')[1]
+            logging.info('path: ' + path)
+            with open(path) as f:
+                for line in f:
+                    logs.append(line)
+            self.send_response(msg=str(logs))
         while data:
             logging.info(data)
             msg = data
