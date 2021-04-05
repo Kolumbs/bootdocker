@@ -153,17 +153,9 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         self.payload = self.payload.decode()
         self.msg += '\n    Data(decoded): ' + self.payload
         url = 'git_url'
-        if url in self.payload:
-            a = self.payload.find(url)
-            a -= 1
-            url = self.payload[a:]
-            a = url.find(',')
-            url = url[:a]
-            self.msg += '\n    Url stage 1: ' + url
-            a = url.find(':')
-            url = url[a+1:]
-            self.msg += '\n    Url stage 2: ' + url
-            url = url.strip('"') + '#main'
+        value = self.extract(self.payload,url)
+        if value:
+            url = value + '#main'
             self.msg += '\n    Docker lanched with: ' + url
             self.send_response(msg='Git handler posted\n')
             logging.info('Docker starts')
@@ -175,6 +167,20 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
             msg += '    git_url\n'
             self.send_response(status='400 Bad Request',msg=msg)
 
+    def extract(self,content,key):
+        '''Safely extracts content assuming json file'''
+        if key in content:
+            a = content.find(url)
+            a -= 1
+            value = content[a:]
+            a = value.find(',')
+            value = value[:a]
+            a = value.find(':')
+            value = value[a+1:]
+            value = value.strip('"') 
+            return value
+        else:
+            return False
 
     def post(self):
         self.httphead = http.client.parse_headers(self.rfile)
