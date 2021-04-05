@@ -107,17 +107,17 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         self.data = self.data.strip('\r\n')
         self.data = self.data.split(' ')
         if self.data:
-            msg = 'Client with IP: ' + str(self.client_address[0])
-            msg += '\n    Sending: ' + str(self.data)
-            logging.info(msg)
             self.dispatcher()
-        logging.info('Client disconnected: ' + str(self.client_address))
+        self.msg += '\n    Client disconnected: ' + str(self.client_address)
+        logging.info(self.msg)
 
     def dispatcher(self):
         services = {'SSH': self.data[0], 'POST': self.data[0], 'GET': self.data[0]}
         s = [key for key in services if key == services[key]]
         if s:
-            logging.info('Dispatching service: ' + s[0])
+            self.msg = 'Client with IP: ' + str(self.client_address[0])
+            self.msg += '\n    Sending: ' + str(self.data)
+            self.msg += '\n    Dispatching service: ' + s[0]
             try:
                 eval('self.' + s[0].lower() + '()')
             except Exception as err:
@@ -203,24 +203,30 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
     def get(self):
         logs = self.data[1].split('?')
         if logs[0] == '/logs':
-            logging.info('Sending log request')
+            self.msg += '\n    Sending log request'
             logs = self.get_log()
             self.send_response(msg=logs,title='Bot logs')
         else:
             self.send_response()
 
     def get_log(self,lines=1000):
-        '''Opens log file rewrites from bottom to top all content, must return string'''
+        '''Opens log file rewrites from bottom to top all content.
+        Returns string'''
         logs = []
+        l = ''
         with open(args.file) as f:
             for line in f:
+                if line[:2] == '  ':
+                    l = logs.pop()
+                    l += line
+                    line = l
                 logs.append(line)
         tmp = []
         while logs and lines:
             line = logs.pop()
             tmp.append(line)
             lines -= 1
-        logs=''
+        logs = ''
         for line in tmp:
             logs += line
         logs = '<pre>' + logs + '</pre>'
