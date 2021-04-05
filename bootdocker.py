@@ -22,16 +22,56 @@ import logging.handlers
 import _thread
 
 
-def error_trace(exc,error):
-    '''Adds stack trace and returns it.'''
-    stack = traceback.format_exception(exc,error,error.__traceback__)
-    msg = ''
-    for item in stack:
-        msg += item
-    return msg
 
 
-class Docker():
+class Util():
+
+    def __init__(self,log_file):
+        self.log_message = ''
+        self.file = log_file
+
+    def log(self,msg,post=False,buf_clear=True):
+        if not self.log_message:
+            self.log_message += msg + '\n'
+        elif post:
+            self.log_message += ' '*4 + str(msg)
+        else:
+            self.log_message += ' '*4 + str(msg) + '\n'
+        if post: 
+            logging.info(self.log_message)
+            if buf_clear: self.log_message = ''
+
+    def error_trace(self,exc,error):
+        '''Adds stack trace and returns it.'''
+        stack = traceback.format_exception(exc,error,error.__traceback__)
+        for item in stack:
+            self.log(item)
+
+    def get_log(self,lines=1000):
+        '''Opens log file rewrites from bottom to top all content.
+        Returns string'''
+        logs = []
+        l = ''
+        with open(self.file) as f:
+            in_lines = f.readlines()
+        while in_lines and lines:
+            new_line = in_lines.pop()
+            if new_line[:2] == '  ':
+                l = new_line + l
+            elif new_line[:2] == '\n':
+                continue
+            elif l:
+                logs.append(new_line + l)
+                l = ''
+            else:
+                logs.append(new_line)
+            lines -=1
+        for line in logs:
+            l += line
+        logs = '<pre>' + l + '</pre>'
+        return logs
+
+class Docker(Util):
     '''
     Manages docker images by building them, starting and running. 
     
@@ -42,17 +82,18 @@ class Docker():
     '''
 
 
-    def __init__(self,repo,tag,git_url):
+    def __init__(self,repo,tag,git_url,log_file):
         self.repo = repo
         self.tag = tag
         self.url = git_url
+        Util.__init__(self,log_file) 
 
     def run(self,program,log=True,blocking=True):
         '''Runs program and returns completed process.
         program - string of shell command
         log - set to True if Stdout must be logged not returned
         blocking - set to False to not wait for return'''
-        logging.info('Calling shell: ' + program)
+        self.log('Calling shell: ' + program)
         logs = []
         proc = subprocess.Popen(program,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         proc.poll()
@@ -61,7 +102,7 @@ class Docker():
         if proc.returncode != 0 and proc.returncode != None: logs += proc.stderr.readlines()
         for log in logs:
             log = log.strip(b'\n')
-            if log: logging.info(log)
+            if log: self.log(log.decode())
         return proc
 
     def cons(self,job):
@@ -76,55 +117,54 @@ class Docker():
             self.run('docker container wait %s' % con,log=False)
 
     def start(self):
-        logging.info('STARTED')
+        self.log('STARTED')
         cmd = 'docker build --tag %s:%s %s' % (self.repo,self.tag,self.url)
         self.run(cmd)
-        logging.info('BUILT')
+        self.log('BUILT')
         self.cons('stop')
         self.run('docker container prune -f')
         proc = self.run('docker run %s:%s' % (self.repo,self.tag),blocking=False)
-        logging.info('STARTED RUN')
+        self.log('STARTED RUN...',post=True,buf_clear=False)
         while proc.returncode == None:
             time.sleep(2)
             proc.poll()
             if not proc.returncode == None or not proc.returncode == 0:
-                logging.info('Program ends with error code: ' + str(proc.returncode))
+                self.log('Program ends with error code: ' + str(proc.returncode))
                 for line in proc.stderr.readlines():
-                    logging.info(line.decode())
+                    self.log(line.decode())
             else:
-                logging.info('Program has finished succesfully with code: ' + str(proc.returncode))
+                self.log('Program has finished succesfully with code: ' + str(proc.returncode))
             time.sleep(20)
             proc
-        logging.info('END')
+        self.log('END',post=True)
 
 
 
-class DockerServer(socketserver.StreamRequestHandler,Docker):
+class DockerServer(socketserver.StreamRequestHandler,Util):
 
 
     def handle(self):
+        Util.__init__(self,args.file) 
         self.data = self.rfile.readline().decode()
         self.data = self.data.strip('\r\n')
         self.data = self.data.split(' ')
         if self.data:
             self.dispatcher()
-        self.msg += '\n    Client disconnected: ' + str(self.client_address)
-        logging.info(self.msg)
+        self.log('Client disconnected: ' + str(self.client_address),post=True)
 
     def dispatcher(self):
         services = {'SSH': self.data[0], 'POST': self.data[0], 'GET': self.data[0]}
         s = [key for key in services if key == services[key]]
         if s:
-            self.msg = 'Client with IP: ' + str(self.client_address[0])
-            self.msg += '\n    Sending: ' + str(self.data)
-            self.msg += '\n    Dispatching service: ' + s[0]
+            self.log('Client with IP: ' + str(self.client_address))
+            self.log('Sending: ' + str(self.data))
+            self.log('Dispatching service: ' + s[0])
             try:
                 eval('self.' + s[0].lower() + '()')
             except Exception as err:
-                logging.info(error_trace(Exception,err))
-                raise
+                self.error_trace(Exception,err)
         else:
-            logging.info('No matching service found')
+            self.log('No matching service found')
 
     def ssh(self):
         myPort = ('localhost', 22002)
@@ -147,22 +187,21 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
                     self.request.sendall(data)
 
     def git(self,repo,tag):
-        self.msg += '\n    Http request: ' + str(self.data)
-        self.msg += '\n    Http headers: ' + str(self.httphead.keys())
-        self.msg += '\n    Http values: ' + str(self.httphead.values())
+        self.log('Http headers: ' + str(self.httphead.keys()))
+        self.log('Http values: ' + str(self.httphead.values()))
         self.payload = self.payload.decode()
-        self.msg += '\n    Data(decoded): ' + self.payload
+        self.log('Data(decoded): ' + self.payload)
         git_url = self.extract(self.payload,'git_url')
         git_branch = self.extract(self.payload,'ref')
         if git_url and git_branch:
             git_branch = git_branch.split('/')
             url = git_url + '#' + git_branch[2]
-            self.msg += '\n    Docker lanch with: ' + url
+            self.log('Docker launch with: ' + url)
             self.send_response(msg='Git handler posted\n')
-            logging.info('Docker starts')
-            docker = Docker(repo,tag,url)
-            _thread.start_new_thread(docker.start)
-            logging.info('Docker started as thread')
+            self.log('Docker starts')
+            docker = Docker(repo,tag,url,args.file)
+            _thread.start_new_thread(docker.start,())
+            self.log('Docker started as thread')
         else:
             msg = 'POST requests with /git-bot:{botnam} requires payload to contain:\n'
             msg += '    git_url - git://github.com/ type\n'
@@ -172,7 +211,7 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
     def extract(self,content,key):
         '''Safely extracts content assuming json file'''
         if key in content:
-            a = content.find(url)
+            a = content.find(key)
             a -= 1
             value = content[a:]
             a = value.find(',')
@@ -190,14 +229,13 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         if c: self.payload = self.rfile.read(c)
         request = self.data[1]
         request = request.split(':')
-        self.msg += '\n    Request: ' + str(request)
         if request[0] == '/git-bot' and len(request) > 1: 
             self.git('bots',request[1])
         else:
             msg = 'POST requests must contain:\n'
             msg += '    /git-bot:{botname}\n'
             msg += '    where botname is the name you give in docker run\n'
-            self.msg += msg
+            self.log(msg)
             self.send_response(status='400 Bad Request',msg=msg)
 
     def send_response(self,status='200 OK',msg=False,title=False):
@@ -219,34 +257,12 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
     def get(self):
         logs = self.data[1].split('?')
         if logs[0] == '/logs':
-            self.msg += '\n    Sending log request'
+            self.log('Sending log request')
             logs = self.get_log()
             self.send_response(msg=logs,title='Bot logs')
         else:
             self.send_response()
 
-    def get_log(self,lines=1000):
-        '''Opens log file rewrites from bottom to top all content.
-        Returns string'''
-        logs = []
-        l = ''
-        with open(args.file) as f:
-            for line in f:
-                if line[:2] == '  ':
-                    l = logs.pop()
-                    l += line
-                    line = l
-                logs.append(line)
-        tmp = []
-        while logs and lines:
-            line = logs.pop()
-            tmp.append(line)
-            lines -= 1
-        logs = ''
-        for line in tmp:
-            logs += line
-        logs = '<pre>' + logs + '</pre>'
-        return logs
 
     def boil_html(self,msg,title='Blank document'):
         '''Prepares a string of valid html document'''
@@ -307,12 +323,22 @@ if __name__ == '__main__':
         sys.exit()
     myPort = ('', args.port)
     try:
+        _log = Util(args.file)
         with ThreadedTCPServer(myPort, DockerServer) as server:
             logging.info('Server started listening on port: ' + str(myPort))
             server.serve_forever()
     except PermissionError as perm:
         print('Application stack trace:')
-        print(error_trace(Exception,perm))
+        _log.error_trace(Exception,perm)
+        print(_log.log_message)
         print('Permission error: please run with elevated privileges')
+    except OSError as err:
+        print('Application stack trace:')
+        _log.error_trace(Exception,perm)
+        print(_log.log_message)
+        print('err string value: ' + str(err))
+        if 'Errno 98' in str(err):
+            print('Wait for socket to free up and try to start again')
     except Exception as err:
-        print(error_trace(Exception,err))
+        _log.error_trace(Exception,perm)
+        print(_log.log_message)
