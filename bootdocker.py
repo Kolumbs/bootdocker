@@ -76,26 +76,26 @@ class Docker():
             self.run('docker container wait %s' % con,log=False)
 
     def start(self):
-        print('STARTED')
+        logging.info('STARTED')
         cmd = 'docker build --tag %s:%s %s' % (self.repo,self.tag,self.url)
         self.run(cmd)
-        print('BUILT')
+        logging.info('BUILT')
         self.cons('stop')
         self.run('docker container prune -f')
         proc = self.run('docker run %s:%s' % (self.repo,self.tag),blocking=False)
-        print('STARTED RUN')
+        logging.info('STARTED RUN')
         while proc.returncode == None:
             time.sleep(2)
             proc.poll()
             if not proc.returncode == None or not proc.returncode == 0:
-                print('Program ends with error code: ' + str(proc.returncode))
+                logging.info('Program ends with error code: ' + str(proc.returncode))
                 for line in proc.stderr.readlines():
-                    print(line.decode())
+                    logging.info(line.decode())
             else:
-                print('Program has finished succesfully with code: ' + str(proc.returncode))
+                logging.info('Program has finished succesfully with code: ' + str(proc.returncode))
             time.sleep(20)
             proc
-        print('END')
+        logging.info('END')
 
 
 
@@ -152,19 +152,21 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         self.msg += '\n    Http values: ' + str(self.httphead.values())
         self.payload = self.payload.decode()
         self.msg += '\n    Data(decoded): ' + self.payload
-        url = 'git_url'
-        value = self.extract(self.payload,url)
-        if value:
-            url = value + '#main'
-            self.msg += '\n    Docker lanched with: ' + url
+        git_url = self.extract(self.payload,'git_url')
+        git_branch = self.extract(self.payload,'ref')
+        if git_url and git_branch:
+            git_branch = git_branch.split('/')
+            url = git_url + '#' + git_branch[2]
+            self.msg += '\n    Docker lanch with: ' + url
             self.send_response(msg='Git handler posted\n')
             logging.info('Docker starts')
-            resp = Docker(repo,tag,url).start()
-            logging.info('Response from Docker object' + str(resp))
-            logging.info('Docker ends')
+            docker = Docker(repo,tag,url)
+            _thread.start_new_thread(docker.start)
+            logging.info('Docker started as thread')
         else:
             msg = 'POST requests with /git-bot:{botnam} requires payload to contain:\n'
-            msg += '    git_url\n'
+            msg += '    git_url - git://github.com/ type\n'
+            msg += '    ref - branch location in commit refs/heads/{branch}\n'
             self.send_response(status='400 Bad Request',msg=msg)
 
     def extract(self,content,key):
