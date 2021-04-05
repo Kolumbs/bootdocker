@@ -167,7 +167,9 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
             url = url.strip('"') + '#main'
             self.msg += '\n    Docker lanched with: ' + url
             self.send_response(msg='Git handler posted\n')
-            Docker(repo,tag,url).start()
+            logging.info('Docker starts')
+            resp = Docker(repo,tag,url).start()
+            logging.info('Response from Docker object' + str(resp))
             logging.info('Docker ends')
         else:
             msg = 'POST requests with /git-bot:{botnam} requires payload to contain:\n'
