@@ -103,12 +103,13 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
 
 
     def handle(self):
-        logging.info('Client connected: ' + str(self.client_address))
         self.data = self.rfile.readline().decode()
         self.data = self.data.strip('\r\n')
         self.data = self.data.split(' ')
         if self.data:
-            logging.info('Client sending: ' + str(self.data))
+            msg = 'Client with IP: ' + str(self.client_address[0])
+            msg += '\n    Sending: ' + str(self.data)
+            logging.info(msg)
             self.dispatcher()
         logging.info('Client disconnected: ' + str(self.client_address))
 
