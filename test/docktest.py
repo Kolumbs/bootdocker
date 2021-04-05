@@ -1,8 +1,8 @@
 '''
 Testcase for building docker and running
 '''
-import time
 
-while True:
-    print('Test')
-    time.sleep(4)
+import sys
+
+print('Test docker imager has run!')
+print(sys.platform)
