@@ -182,13 +182,14 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         if c: self.payload = self.rfile.read(c)
         request = self.data[1]
         request = request.split(':')
-        self.msg += 'Request: ' + str(request)
-        if request[0] == '/git-bot': 
+        self.msg += '\n    Request: ' + str(request)
+        if request[0] == '/git-bot' and len(request) > 1: 
             self.git('bots',request[1])
         else:
-            msg = 'POST requests are accepted on:\n'
+            msg = 'POST requests must contain:\n'
             msg += '    /git-bot:{botname}\n'
             msg += '    where botname is the name you give in docker run\n'
+            self.msg += msg
             self.send_response(status='400 Bad Request',msg=msg)
 
     def send_response(self,status='200 OK',msg=False,title=False):
