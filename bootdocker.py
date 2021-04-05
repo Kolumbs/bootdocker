@@ -147,29 +147,33 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
                     self.request.sendall(data)
 
     def git(self,repo,tag):
-        logging.info('Read json from git webhook')
-        logging.info('Http request: ' + str(self.data))
-        logging.info('Http headers: ' + str(self.httphead.keys()))
-        logging.info('Http values: ' + str(self.httphead.values()))
-        logging.info('Data sent: ' + str(self.payload))
+        self.msg += '\n    Http request: ' + str(self.data)
+        self.msg += '\n    Http headers: ' + str(self.httphead.keys())
+        self.msg += '\n    Http values: ' + str(self.httphead.values())
         self.payload = self.payload.decode()
-        logging.info('Data decoded: ' + self.payload)
+        self.msg += '\n    Data(decoded): ' + self.payload
         url = 'git_url'
-        logging.info('git_url test: ' + str(url in self.payload))
+        self.msg += logging.info('\n    Status of git_url in data: ' + str(url in self.payload))
         if url in self.payload:
             a = self.payload.find(url)
             a -= 1
             url = self.payload[a:]
             a = url.find(',')
             url = url[:a]
-            logging.info('Url stage 1: ' + url)
+            self.msg += '\n    Url stage 1: ' + url
             a = url.find(':')
             url = url[a+1:]
-            logging.info('Url stage 2: ' + url)
+            self.msg += '\n    Url stage 2: ' + url
             url = url.strip('"') + '#main'
-            logging.info('Docker lanched with: ' + url)
+            self.msg += '\n    Docker lanched with: ' + url
+            self.send_response(msg='Git handler posted\n')
             Docker(repo,tag,url).start()
             logging.info('Docker ends')
+        else:
+            msg = 'POST requests with /git-bot:{botnam} requires payload to contain:\n'
+            msg += '    git_url\n'
+            self.send_response(status='400 Bad Request',msg=msg)
+
 
     def post(self):
         self.httphead = http.client.parse_headers(self.rfile)
@@ -177,12 +181,14 @@ class DockerServer(socketserver.StreamRequestHandler,Docker):
         if c: self.payload = self.rfile.read(c)
         request = self.data[1]
         request = request.split(':')
-        logging.info('Request: ' + str(request))
+        self.msg += 'Request: ' + str(request)
         if request[0] == '/git-bot': 
-            self.send_response(msg='Git handler posted\n')
             self.git('bots',request[1])
         else:
-            self.send_response()
+            msg = 'POST requests are accepted on:\n'
+            msg += '    /git-bot:{botname}\n'
+            msg += '    where botname is the name you give in docker run\n'
+            self.send_response(status='400 Bad Request',msg=msg)
 
     def send_response(self,status='200 OK',msg=False,title=False):
         if not title:
