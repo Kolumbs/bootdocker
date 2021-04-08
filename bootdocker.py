@@ -183,7 +183,7 @@ class DockerServer(socketserver.StreamRequestHandler,Util):
                     logging.info('Receiving from ssh service:\n ' + str(data))
                     self.request.sendall(data)
 
-    def git(self,params):
+    def git(self,param):
         self.log('Http headers: ' + str(self.httphead.keys()))
         self.log('Http values: ' + str(self.httphead.values()))
         self.payload = self.payload.decode()
@@ -193,12 +193,12 @@ class DockerServer(socketserver.StreamRequestHandler,Util):
         if git_url and git_branch:
             git_branch = git_branch.split('/')
             url = git_url + '#' + git_branch[2]
-            if 'folder' in p:
-                url += ':' + p['folder']
+            if 'folder' in param:
+                url += ':' + param['folder']
             self.log('Docker launch with: ' + url)
             self.send_response(msg='Git handler posted\n')
             self.log('Docker starts')
-            docker = Docker(p['repo'],p['tag'],url,args.file)
+            docker = Docker(param['repo'],param['tag'],url,args.file)
             _thread.start_new_thread(docker.start,())
             self.log('Docker started as thread')
         else:
@@ -237,21 +237,21 @@ class DockerServer(socketserver.StreamRequestHandler,Util):
                 p[param[0]] = param[1]
             assert 'tag' in p.keys() and 'repo' in p.keys()
             self.git(p)
-        except:
+        except Exception as err:
             msg = 'POST requests for git contain:\n'
             msg += '    repo - name of docker repo to use\n'
             msg += '    tag - tag of docker image\n'
             msg += '    folder[Optional] - if dockerfile is located outside git root folder\n'
             msg += 'Syntax:\n'
             msg += '/git?repo=foo&tag=sometag&folder=subfoldername\n'
-            self.log(msg)
+            self.error_trace(Exception,err)
             self.send_response(status='400 Bad Request',msg=msg)
 
     def send_response(self,status='200 OK',msg=False,title=False):
         if not title:
-            title = 'Bot reply'
+            title = 'API status'
         if not msg:
-            msg = self.boil_html('This is an autobot API service',title=title)
+            msg = self.boil_html('This is a bootdocker API service',title=title)
         else:
             msg = self.boil_html(msg,title=title)
         l = len(msg)
@@ -343,9 +343,8 @@ if __name__ == '__main__':
         print('Permission error: please run with elevated privileges')
     except OSError as err:
         print('Application stack trace:')
-        _log.error_trace(Exception,perm)
+        _log.error_trace(Exception,err)
         print(_log.log_message)
-        print('err string value: ' + str(err))
         if 'Errno 98' in str(err):
             print('Wait for socket to free up and try to start again')
     except Exception as err:
