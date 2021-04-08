@@ -6,8 +6,6 @@ Wish:
         Subprocess:
         Changed in version 3.7: Added the text parameter, as a more understandable alias of universal_newlines. Added the capture_output parameter
 
-
-Simple usage:
 '''
 
 import subprocess
@@ -77,8 +75,7 @@ class Docker(Util):
     
     Starts docker and returns STARTED, if docker fails at any time issues FAILED
     >>> url = 'git@github.com:Kolumbs/bootdocker.git#main:test'
-    >>> Docker('bot','demo',url).start()
-    <STARTED>
+    >>> Docker('bot','demo',url,'/tmp/bootdocker').start()
     '''
 
 
@@ -186,7 +183,7 @@ class DockerServer(socketserver.StreamRequestHandler,Util):
                     logging.info('Receiving from ssh service:\n ' + str(data))
                     self.request.sendall(data)
 
-    def git(self,repo,tag):
+    def git(self,params):
         self.log('Http headers: ' + str(self.httphead.keys()))
         self.log('Http values: ' + str(self.httphead.values()))
         self.payload = self.payload.decode()
@@ -196,16 +193,18 @@ class DockerServer(socketserver.StreamRequestHandler,Util):
         if git_url and git_branch:
             git_branch = git_branch.split('/')
             url = git_url + '#' + git_branch[2]
+            if 'folder' in p:
+                url += ':' + p['folder']
             self.log('Docker launch with: ' + url)
             self.send_response(msg='Git handler posted\n')
             self.log('Docker starts')
-            docker = Docker(repo,tag,url,args.file)
+            docker = Docker(p['repo'],p['tag'],url,args.file)
             _thread.start_new_thread(docker.start,())
             self.log('Docker started as thread')
         else:
-            msg = 'POST requests with /git-bot:{botnam} requires payload to contain:\n'
-            msg += '    git_url - git://github.com/ type\n'
-            msg += '    ref - branch location in commit refs/heads/{branch}\n'
+            msg = 'POST requests with /git requires payload to contain:\n'
+            msg += '    git_url - git://github.com/{yourRepoPath... \n'
+            msg += '    ref - branch location in commit ref/heads/{branch}\n'
             self.send_response(status='400 Bad Request',msg=msg)
 
     def extract(self,content,key):
@@ -228,13 +227,23 @@ class DockerServer(socketserver.StreamRequestHandler,Util):
         c = int(self.httphead.get('Content-Length'))
         if c: self.payload = self.rfile.read(c)
         request = self.data[1]
-        request = request.split(':')
-        if request[0] == '/git-bot' and len(request) > 1: 
-            self.git('bots',request[1])
-        else:
-            msg = 'POST requests must contain:\n'
-            msg += '    /git-bot:{botname}\n'
-            msg += '    where botname is the name you give in docker run\n'
+        request = request.split('?')
+        try:
+            assert request[0] == '/git'
+            params = request[1].split('&')
+            p = {}
+            for param in params:
+                param = param.split('=')
+                p[param[0]] = param[1]
+            assert 'tag' in p.keys() and 'repo' in p.keys()
+            self.git(p)
+        except:
+            msg = 'POST requests for git contain:\n'
+            msg += '    repo - name of docker repo to use\n'
+            msg += '    tag - tag of docker image\n'
+            msg += '    folder[Optional] - if dockerfile is located outside git root folder\n'
+            msg += 'Syntax:\n'
+            msg += '/git?repo=foo&tag=sometag&folder=subfoldername\n'
             self.log(msg)
             self.send_response(status='400 Bad Request',msg=msg)
 
