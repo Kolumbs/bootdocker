@@ -10,6 +10,7 @@ Wish:
 
 import subprocess
 import time
+import datetime
 import platform
 import socketserver
 import socket
@@ -113,28 +114,34 @@ class Docker(Util):
             if job == 'stop': self.run('docker container stop %s' % con)
             self.run('docker container wait %s' % con,log=False)
 
-    def start(self):
-        self.log('STARTED')
-        cmd = 'docker build --tag %s:%s %s' % (self.repo,self.tag,self.url)
-        self.run(cmd)
-        self.log('BUILT')
-        self.cons('stop')
-        self.run('docker container prune -f')
-        proc = self.run('docker run %s:%s' % (self.repo,self.tag),blocking=False)
-        self.log('STARTED RUN...',post=True,buf_clear=False)
-        while proc.returncode == None:
-            time.sleep(2)
-            proc.poll()
-            if not proc.returncode == None or not proc.returncode == 0:
-                self.log('Program ends with error code: ' + str(proc.returncode))
-                for line in proc.stderr.readlines():
-                    self.log(line.decode())
-            else:
-                self.log('Program has finished succesfully with code: ' + str(proc.returncode))
-            time.sleep(20)
-            proc
-        self.log('END',post=True)
+    def start(self,m):
+        while True:
+            self.log(m)
+            cmd = 'docker build --tag %s:%s %s' % (self.repo,self.tag,self.url)
+            if not self.run(cmd): break
+            self.log('BUILT: ' + str(datetime.datetime.now()))
+            if not self.cons('stop'): break
+            if not self.run('docker container prune -f'): break
+            proc = self.run('docker run %s:%s' % (self.repo,self.tag),blocking=False)
+            self.log('STARTED RUN: ' + str(datetime.datetime.now()))
+            while proc.returncode == None:
+                time.sleep(2)
+                proc.poll()
+                if not proc.returncode == None:
+                    self.check_return(proc)
+                time.sleep(20)
+        self.log('END: ' + str(datetime.datetime.now()),post=True)
 
+    def check_return(self,proc):
+        proc.poll()
+        if not proc.returncode == 0:
+            self.log('Program ends with error code: ' + str(proc.returncode))
+            for line in proc.stderr.readlines():
+                self.log(line.decode())
+            return False
+        else:
+            self.log('Program has finished succesfully with code: ' + str(proc.returncode))
+            return True
 
 
 class DockerServer(socketserver.StreamRequestHandler,Util):
@@ -192,18 +199,23 @@ class DockerServer(socketserver.StreamRequestHandler,Util):
         git_branch = self.extract(self.payload,'ref')
         if git_url and git_branch:
             git_branch = git_branch.split('/')
-            url = git_url + '#' + git_branch[2]
+            git_url = git_url.split('/',maxsplit=3)
+            url = 'git@github.com:' + git_url[3] + '#' + git_branch[2]
             if 'folder' in param:
                 url += ':' + param['folder']
             self.log('Docker launch with: ' + url)
             self.send_response(msg='Git handler posted\n')
             self.log('Docker starts')
             docker = Docker(param['repo'],param['tag'],url,args.file)
-            _thread.start_new_thread(docker.start,())
-            self.log('Docker started as thread')
+            m = 'Docker with image id "' + str(param['repo'])
+            m += ':' + str(param['tag']) + '"'
+            m += ' started by ' + str(self.client_address)
+            m += ' at ' + str(datetime.datetime.now())
+            _thread.start_new_thread(docker.start,(m,))
+            self.log(m)
         else:
             msg = 'POST requests with /git requires payload to contain:\n'
-            msg += '    git_url - git://github.com/{yourRepoPath... \n'
+            msg += '    git_url - git://github.com/{yourRepoPath}... \n'
             msg += '    ref - branch location in commit ref/heads/{branch}\n'
             self.send_response(status='400 Bad Request',msg=msg)
 
